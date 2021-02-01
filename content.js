@@ -1,6 +1,7 @@
-const main = () => {
+function validLocation() {
   const currURL = window.location.href;
   const pattern = /^https:\/\/github\.com\/(([a-z0-9])+)$/i;
+  const patternOverview = /^https:\/\/github\.com\/[a-z0-9]+\?tab=overview&from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/i;
   if (pattern.test(currURL)) {
     const ex_usernames = [
       "pulls",
@@ -15,22 +16,10 @@ const main = () => {
     ];
     const [, username] = currURL.match(pattern);
     // check for excluded usernames
-    if (!ex_usernames.some((nm) => nm === username)) {
-      const h1El = document.querySelector("h1");
-      const cwEl = document.createElement("span");
-      // initialize main classes
-      const bridge = new Bridge();
-      const conway = new ConWay();
-      cwEl.addEventListener("click",_ => handleClick(bridge, conway));
-      cwEl.textContent = "CWGoL";
-      // temp styles I guess
-      ["p-nickname", "vcard-username", "d-block"].forEach((c) => {
-        cwEl.classList.add(c);
-      });
-      cwEl.style = "cursor: pointer; user-select: none;";
-      h1El.appendChild(cwEl);
-    }
+    if (!ex_usernames.some((nm) => nm === username)) return true;
   }
+  if(patternOverview.test(currURL)) return true;
+  return false;
 };
 
 class Bridge {
@@ -171,7 +160,6 @@ class Bridge {
   }
 }
 
-
 class ConWay {
   constructor() {
     this.terrain;
@@ -234,11 +222,16 @@ class ConWay {
   }
 }
 
-const handleClick = (bridge, conway) => {
-  bridge.updateTerrain();
-  conway.populateTerrain(bridge.adapterHandler.bind(bridge));
-  conway.nextGen();
-  bridge.setNextGen(conway.terrain);
-};
+chrome.runtime.onMessage.addListener(gotMessage);
 
-main();
+const bridge = new Bridge();
+const conway = new ConWay();
+function gotMessage(request, sender, sendResonse) {
+  console.log(request);
+  if(validLocation()) {
+    bridge.updateTerrain();
+    conway.populateTerrain(bridge.adapterHandler.bind(bridge));
+    conway.nextGen();
+    bridge.setNextGen(conway.terrain);
+  }
+}
