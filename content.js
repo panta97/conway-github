@@ -19,7 +19,9 @@ const main = () => {
       console.log("you will run here conway's game of life");
       const h1El = document.querySelector("h1");
       const cwEl = document.createElement("span");
-      cwEl.addEventListener("click", handleClick);
+      // get colors levels
+      const colors = getColorsLevels();
+      cwEl.addEventListener("click",_ => handleClick(colors));
       cwEl.textContent = "CWGoL";
       // temp styles I guess
       ["p-nickname", "vcard-username", "d-block"].forEach((c) => {
@@ -35,11 +37,38 @@ const main = () => {
   }
 };
 
-const handleClick = () => {
-  console.log("next gen ;");
-//   let rows = document.getElementsByTagName("tbody")[0].children;
+const getColorsLevels = () => {
   let rows = document.querySelector('.js-calendar-graph-svg').children[0].children;
-  console.log(rows);
+  const regAlive = /^var\(--color-calendar-graph-day-L([0-9])-bg\)$/;
+  const colors = {};
+  for(let i=0; i<rows.length; i++) {
+    for(let j=0; j<rows[i].children.length; j++) {
+      if (rows[i].tagName === 'g') {
+        const fillAttr = rows[i].children[j].getAttribute('fill');
+        if (regAlive.test(fillAttr)) {
+          const colorLevel = fillAttr.match(regAlive)[1];
+          if(colors[colorLevel]) {
+            colors[colorLevel]++;
+          } else {
+            colors[colorLevel] = 1;
+          }
+        }
+      }
+    }
+  }
+
+  let colorArr = [];
+  for (const [key, value] of Object.entries(colors)) {
+    colorArr.push({level: Number(key), val: value})
+  }
+
+  colorArr.sort((a, b) => a.level - b.level);
+  return colorArr;
+}
+
+const handleClick = (colors) => {
+  console.log("next gen ;");
+  let rows = document.querySelector('.js-calendar-graph-svg').children[0].children;
   let grid = [];
   let gridNextGen = [];
 
@@ -83,8 +112,9 @@ const handleClick = () => {
         if (row < 0 || row > grid.length - 1) continue;
         if (col < 0 || col > grid.length - 1) continue;
 
-        // nbCount += grid[row][col].checked ? 1 : 0;
-        nbCount += checkIsAlive(grid[row][col]) ? 1 : 0;
+        const neighbor = grid[row][col];
+        if(neighbor)
+          nbCount += checkIsAlive(neighbor) ? 1 : 0;
       }
 
       let isAlive = checkIsAlive(grid[i][j]);
@@ -97,7 +127,7 @@ const handleClick = () => {
           isAlive = true;
         }
       }
-      gridNextGen[i][j] = getFillName(isAlive);
+      gridNextGen[i][j] = getFillName(isAlive, colors);
     }
   }
 
@@ -109,17 +139,28 @@ const handleClick = () => {
 };
 
 const checkIsAlive = (daySquare) => {
-  try {
-    const regAlive = /^var\(--color-calendar-graph-day-L[0-9]-bg\)$/;
-    if (regAlive.test(daySquare.getAttribute('fill'))) return true;
-    return false;
-  } catch (e) {
-    console.log(e);
-  }
+  const regAlive = /^var\(--color-calendar-graph-day-L[0-9]-bg\)$/;
+  if (regAlive.test(daySquare.getAttribute('fill'))) return true;
+  return false;
 }
 
-const getFillName = (isAlive) => {
-  if(isAlive) return 'var(--color-calendar-graph-day-L1-bg)';
+const getFillName = (isAlive, colors) => {
+  if(isAlive) {
+    const total = colors.reduce((acc, curr) => acc += curr.val, 0);
+    const randVal = Math.floor(Math.random() * total);
+    let colorToSet;
+    let colorCurrSum = 0;
+    let colorPrevSum = 0;
+    for(let i=0; i<colors.length; i++) {
+      colorCurrSum += colors[i].val;
+      colorPrevSum += colors[i-1]?.val ?? 0;
+      if (randVal >= colorPrevSum && randVal < colorCurrSum) {
+        colorToSet = colors[i];
+        break;
+      }
+    }
+    return `var(--color-calendar-graph-day-L${colorToSet.level}-bg)`;
+  }
   return 'var(--color-calendar-graph-day-bg)';
 }
 
