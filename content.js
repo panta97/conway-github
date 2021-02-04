@@ -1,47 +1,42 @@
-function validLocation() {
-  const currURL = window.location.href;
-  const pattern = /^https:\/\/github\.com\/(([a-z0-9])+)$/i;
-  const patternOverview = /^https:\/\/github\.com\/[a-z0-9]+\?tab=overview&from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/i;
-  if (pattern.test(currURL)) {
-    const ex_usernames = [
-      "pulls",
-      "requests",
-      "marketplace",
-      "explore",
-      "home",
-      "topics",
-      "trending",
-      "collections",
-      "events",
-    ];
-    const [, username] = currURL.match(pattern);
-    // check for excluded usernames
-    if (!ex_usernames.some((nm) => nm === username)) return true;
-  }
-  if(patternOverview.test(currURL)) return true;
-  return false;
-};
-
-class Bridge {
+class Calendar {
   constructor() {
-    this.terrain;
-    this.colors = this.getColorsLevels();
+    this.originalGraph;
+    this.workingGraph;
+    this.dateRange = {
+      from: '',
+      to: '',
+    }
+    this.colors;
   }
 
-  updateTerrain() {
-    this.terrain = document.querySelector('.js-calendar-graph-svg').children[0].children;
+  updateDateRange(from, to) {
+    this.dateRange.from = from;
+    this.dateRange.to = to;
   }
 
-  getColorsLevels() {
-    let rows = document.querySelector('.js-calendar-graph-svg').children[0].children;
-    const regAlive = /^var\(--color-calendar-graph-day-L([0-9])-bg\)$/;
+  updateGraphs(types) {
+    const newGraph = this.getDOMGraph();
+    if (types.some(type => type === 'ORIGINAL')) {
+      this.originalGraph = newGraph;
+    }
+    if (types.some(type => type === 'WORKING')) {
+      this.workingGraph = newGraph;
+    }
+  }
+
+  getDOMGraph() {
+    return document.querySelector('.js-calendar-graph-svg').children[0].children;
+  }
+
+  updateColorsLevels() {
+    let rows = this.originalGraph;
+    // const regAlive = /^var\(--color-calendar-graph-day-L([0-9])-bg\)$/;
     const colors = {};
     for(let i=0; i<rows.length; i++) {
       for(let j=0; j<rows[i].children.length; j++) {
         if (rows[i].tagName === 'g') {
-          const fillAttr = rows[i].children[j].getAttribute('fill');
-          if (regAlive.test(fillAttr)) {
-            const colorLevel = fillAttr.match(regAlive)[1];
+          const colorLevel = rows[i].children[j].getAttribute('data-level');
+          if (colorLevel !== '0') {
             if(colors[colorLevel]) {
               colors[colorLevel]++;
             } else {
@@ -58,21 +53,21 @@ class Bridge {
     }
 
     colorArr.sort((a, b) => a.level - b.level);
-    return colorArr;
+    this.colors = colorArr;
   }
 
   adapterHandler(bluePrint) {
     let grid = [];
-    for (let i = 0; i < this.terrain.length; i++) {
+    for (let i = 0; i < this.workingGraph.length; i++) {
       // only capture g tags
-      if (this.terrain[i].tagName === 'g') {
+      if (this.workingGraph[i].tagName === 'g') {
         let gRow = [];
         // if length is less than 7 complete array
-        if (this.terrain[i].children.length < 7) {
-          gRow = this.completeArr(this.terrain[i].children);
+        if (this.workingGraph[i].children.length < 7) {
+          gRow = this.completeArr(this.workingGraph[i].children);
         } else {
-          for (let j = 0; j < this.terrain[i].children.length; j++) {
-            gRow.push(this.terrain[i].children[j]);
+          for (let j = 0; j < this.workingGraph[i].children.length; j++) {
+            gRow.push(this.workingGraph[i].children[j]);
           }
         }
         grid.push(gRow.map(r => {
@@ -103,8 +98,8 @@ class Bridge {
   }
 
   checkIsAlive(daySquare) {
-    const regAlive = /^var\(--color-calendar-graph-day-L[0-9]-bg\)$/;
-    if (regAlive.test(daySquare.getAttribute('fill'))) return true;
+    // const regAlive = /^var\(--color-calendar-graph-day-L[0-9]-bg\)$/;
+    if (daySquare.getAttribute('data-level') !== '0') return true;
     return false;
   }
 
@@ -116,8 +111,8 @@ class Bridge {
 
       getAttribute() {
         if(this.isAlive)
-          return 'var(--color-calendar-graph-day-L1-bg)'
-        return 'var(--color-calendar-graph-day-bg)'
+          return '1'
+        return '0'
       }
 
       setAttribute() {
@@ -127,19 +122,19 @@ class Bridge {
     return new MockGTAG();
   }
 
-  setNextGen(newTerrain) {
+  renderGraph(newTerrain) {
     for(let i=0; i<newTerrain.length; i++) {
       for(let j=0; j<newTerrain[i].length; j++) {
-        const square = this.terrain[i].children[j];
+        const square = this.workingGraph[i].children[j];
         // some sqaueres might be null
         // because its length it's less than 7
         if(square)
-          square.setAttribute('fill', this.getFillName(newTerrain[i][j].isAlive));
+          square.setAttribute('data-level', this.getColorLevel(newTerrain[i][j].isAlive));
       }
     }
   }
 
-  getFillName = (isAlive) => {
+  getColorLevel = (isAlive) => {
     if(isAlive) {
       const total = this.colors.reduce((acc, curr) => acc += curr.val, 0);
       const randVal = Math.floor(Math.random() * total);
@@ -154,9 +149,9 @@ class Bridge {
           break;
         }
       }
-      return `var(--color-calendar-graph-day-L${colorToSet.level}-bg)`;
+      return `${colorToSet.level}`;
     }
-    return 'var(--color-calendar-graph-day-bg)';
+    return '0';
   }
 }
 
@@ -224,14 +219,28 @@ class ConWay {
 
 chrome.runtime.onMessage.addListener(gotMessage);
 
-const bridge = new Bridge();
+const calendar = new Calendar();
 const conway = new ConWay();
 function gotMessage(request, sender, sendResonse) {
-  console.log(request);
-  if(validLocation()) {
-    bridge.updateTerrain();
-    conway.populateTerrain(bridge.adapterHandler.bind(bridge));
+  const calendarGraph = document.querySelector('.js-calendar-graph');
+  const dateFrom = calendarGraph.getAttribute('data-from'),
+        dateTo = calendarGraph.getAttribute('data-from');
+
+  // validate if calendar graph is showing on the page
+  if(calendarGraph) {
+    // the user changed the calendar data or
+    // the calendar it's been shown for the first time
+    if(calendar.dateRange.from !== dateFrom ||
+      calendar.dateRange.to !== dateTo) {
+      calendar.updateDateRange(dateFrom, dateTo);
+      calendar.updateGraphs(['ORIGINAL', 'WORKING'])
+      calendar.updateColorsLevels();
+      // calendar is the same compute next gen
+    } else {
+      calendar.updateGraphs(['WORKING'])
+    }
+    conway.populateTerrain(calendar.adapterHandler.bind(calendar));
     conway.nextGen();
-    bridge.setNextGen(conway.terrain);
+    calendar.renderGraph(conway.terrain);
   }
 }
